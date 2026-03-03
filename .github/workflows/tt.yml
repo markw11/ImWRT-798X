@@ -1,0 +1,182 @@
+name: openwrt25.12
+
+permissions:
+  contents: write
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      OP_IP:
+        description: '静态IP地址'
+        required: false
+        default: '192.168.2.1'
+        type: string
+      OP_author:
+        description: '定制作者'
+        required: false
+        default: '26dB'
+        type: string
+      CUSTOM_PLUGINS:
+        description: '自定义插件名称，用空格分隔'
+        required: false
+        default: 'luci-theme-aurora luci-app-upnp luci-app-ksmbd'
+        type: string
+
+env:
+  DIY_P1_SH: scripts/diy-part4.sh
+
+jobs:
+  build_firmware:
+    name: 编译 - ${{ matrix.device }}
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        device: ["rax3000m", "rax3000me", "rax3000m-emmc", "rax3000m-nand", "rax3000m-256m-nand", "xr30-emmc", "xr30-nand"]
+        include:
+          - device: "rax3000m"
+            config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cmcc_rax3000m=y"
+          - device: "rax3000me"
+            config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cmcc_rax3000me=y"
+          - device: "rax3000m-emmc"
+            config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cmcc_rax3000m-emmc=y"
+          - device: "rax3000m-nand"
+            config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cmcc_rax3000m-nand=y"
+          - device: "rax3000m-256m-nand"
+            config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cmcc_rax3000m-256m-nand=y"
+          - device: "xr30-nand"
+            config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cmcc_xr30-nand=y"
+          - device: "xr30-emmc"
+            config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cmcc_xr30-emmc=y"
+
+    steps:
+      - name: Checkout 构建仓库（patch/files/config/scripts）
+        uses: actions/checkout@v4
+
+      - name: 释放磁盘空间
+        uses: jlumbroso/free-disk-space@v1.3
+        with:
+          large-packages: true
+          docker-images: true
+          tool-cache: true
+          swap-storage: true
+
+      - name: 安装编译环境
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake curl file g++ gawk gcc-multilib gettext git \
+            libncurses5-dev libssl-dev python3 python3-pyelftools rsync unzip zlib1g-dev \
+            patch wget flex bison lib32gcc-s1 libc6-dev-i386 libelf-dev libtool autopoint \
+            gperf swig coreutils haveged scons rename qemu-utils
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'noreply@github.com'
+          sudo timedatectl set-timezone 'Asia/Shanghai'
+
+      - name: 设置环境变量
+        run: |
+          echo "tag=$(date +'%Y%m%d')" >> $GITHUB_ENV
+          echo "OP_IP=${{ github.event.inputs.OP_IP }}" >> $GITHUB_ENV
+          echo "OP_author=${{ github.event.inputs.OP_author }}" >> $GITHUB_ENV
+          echo "CUSTOM_PLUGINS=${{ github.event.inputs.CUSTOM_PLUGINS }}" >> $GITHUB_ENV
+          echo "DEVICE_NAME=${{ matrix.device }}" >> $GITHUB_ENV
+
+      - name: Checkout OpenWrt 源码
+        uses: actions/checkout@v4
+        with:
+          repository: shiyu1314/openwrt-source
+          path: openwrt
+          fetch-depth: 0
+
+      - name: 切换tag
+        working-directory: openwrt
+        run: |
+          git fetch --tags --depth=1
+          RELEASE_TAG=$(git tag --sort=taggerdate --list 'v25.*' | tail -1)
+          git checkout $RELEASE_TAG
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_ENV
+
+      - name: Feeds + Patch + DIY + 配置 + 下载
+        working-directory: openwrt
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+          # 应用你的 patch 和 diy 脚本
+          [ -d ../patch/diy ] && cp -rf ../patch/diy/*.patch ./ 2>/dev/null || true
+          [ -d ../patch/luci ] && cp -rf ../patch/luci/*.patch feeds/luci/ 2>/dev/null || true
+          [ -d ../patch/nginx ] && cp -rf ../patch/nginx/* feeds/packages/net/nginx/files-luci-support/ 2>/dev/null || true
+          [ -f $GITHUB_WORKSPACE/$DIY_P1_SH ] && $GITHUB_WORKSPACE/$DIY_P1_SH || true
+
+          # 复制 files
+          [ -d ../files ] && cp -a ../files/ ./ || true
+
+          # 基础配置
+          cat > .config << EOF
+          CONFIG_TARGET_mediatek=y
+          CONFIG_TARGET_mediatek_filogic=y
+          ${{ matrix.config }}
+          EOF
+
+          [ -f ../config/op25.config ] && cat ../config/op25.config >> .config || true
+
+          # IP 替换
+          sed -i "s/192.168.1.1/${{ env.OP_IP }}/g" package/base-files/files/bin/config_generate
+
+          # 自定义插件
+          for plugin in ${{ env.CUSTOM_PLUGINS }}; do
+            [[ -n "$plugin" ]] && echo "CONFIG_PACKAGE_$plugin=y" >> .config
+          done
+
+          make defconfig
+          make download -j$(nproc) || make download -j8
+          find dl -size -1024c -delete 2>/dev/null || true
+
+      - name: 编译固件
+        working-directory: openwrt
+        run: |
+          echo "编译线程数: $(($(nproc)*2))"
+          make -j$(($(nproc)*2)) IGNORE_ERRORS="n m" V=s || \
+          make -j$(nproc) IGNORE_ERRORS="n m" V=s || \
+          make -j8 V=s
+
+      - name: 整理固件路径
+        run: |
+          cd openwrt/bin/targets/mediatek/filogic
+          rm -rf packages *.buildinfo profiles.json *.manifest *bl2.bin *kernel.bin *.sha sha256sums 2>/dev/null || true
+          echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+
+      - name: 上传到 Releases
+        uses: softprops/action-gh-release@v2.1.0
+        with:
+          tag_name: ${{ env.release_tag }}-${{ env.tag }}
+          files: ${{ env.FIRMWARE }}/*
+          body: |
+            分支/Tag：${{ env.release_tag }}
+            构建日期：${{ env.tag }}
+            设备：${{ env.DEVICE_NAME }}
+            静态IP：${{ env.OP_IP }}
+            插件：${{ env.CUSTOM_PLUGINS }}
+            作者：${{ env.OP_author }}
+            默认密码：无
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上传到 WebDAV
+        if: success()
+        env:
+          WEBDAV_BASE: ${{ secrets.WEBDAV_URL }}/Openwrt2512
+        run: |
+          cd ${{ env.FIRMWARE }}
+          curl -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" -X MKCOL "${WEBDAV_BASE}/" || true
+          for file in *; do
+            [[ -f "$file" ]] && curl -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" -T "$file" "${WEBDAV_BASE}/$file" || echo "Failed: $file"
+          done
+
+      - name: 清理旧 Releases
+        uses: dev-drprasad/delete-older-releases@v0.3.4
+        with:
+          keep_latest: 7
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
