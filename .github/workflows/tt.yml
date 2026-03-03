@@ -1,4 +1,4 @@
-name: openwrt25.12
+name: openwrt25.12yh
 
 permissions:
   contents: write
