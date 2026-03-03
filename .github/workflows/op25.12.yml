@@ -1,5 +1,8 @@
 name: openwrt25.12
 
+permissions:
+  contents: write
+
 on:
   repository_dispatch:
   workflow_dispatch:
@@ -27,7 +30,9 @@ jobs:
   build_firmware:
     name: 编译固件 - ${{ matrix.device }} - ${{ matrix.source }}
     runs-on: ubuntu-22.04
+
     strategy:
+      fail-fast: false
       matrix:
         device: ["rax3000m", "rax3000me", "rax3000m-emmc", "rax3000m-nand", "rax3000m-256m-nand", "xr30-emmc", "xr30-nand"]
         source: ["openwrt"]
@@ -48,37 +53,28 @@ jobs:
             config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cmcc_xr30-emmc=y"
 
     steps:
-      - name: 检查分支
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 释放磁盘空间（安全版）
+      - name: 释放磁盘空间（优化版）
         run: |
-          sudo apt-get remove --purge -y firefox* google-chrome* microsoft* mono* dotnet* azure* || true
-          sudo apt-get autoremove -y --purge
-          sudo apt-get clean
-          sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
           sudo docker system prune -af --volumes || true
+          sudo apt-get clean
           df -h
 
-      - name: 安装编译环境
+      - name: 安装编译环境（精简版）
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
-            build-essential ccache cmake curl file g++ gawk gcc-multilib gettext git \
-            libncurses5-dev libssl-dev python3 python3-distutils python3-setuptools \
-            python3-pyelftools rsync subversion unzip zlib1g-dev patch wget \
-            asciidoc binutils bzip2 flex bison lib32gcc-s1 libc6-dev-i386 \
-            uglifyjs msmtp texinfo libreadline-dev libglib2.0-dev xmlto libelf-dev \
-            libtool autopoint gperf swig coreutils haveged scons rename qemu-utils
-          sudo apt-get clean
+            build-essential ccache gawk gcc-multilib gettext git \
+            libncurses5-dev libssl-dev python3 rsync unzip zlib1g-dev \
+            flex bison lib32gcc-s1 libc6-dev-i386 wget
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'noreply@github.com'
           sudo timedatectl set-timezone 'Asia/Shanghai'
-          sudo mkdir -p /workdir
-          sudo chown $USER:$GROUPS /workdir
-          df -h
 
       - name: 设置环境变量
         run: |
@@ -93,54 +89,38 @@ jobs:
           echo "REPO_BRANCH=openwrt-25.12" >> $GITHUB_ENV
 
       - name: 克隆源代码
-        working-directory: /workdir
         run: |
           git clone $REPO_URL $SOURCE_NAME
-          ln -sf /workdir/$SOURCE_NAME $GITHUB_WORKSPACE/$SOURCE_NAME
 
       - name: 切换到对应 tag
         run: |
           cd $SOURCE_NAME
-          case $REPO_BRANCH in
-            openwrt-25.12)
-              _release_tag=$(git tag --sort=taggerdate --list 'v25.*' | tail -1)
-              git checkout $_release_tag
-              ;;
-            *)
-              echo "无法匹配分支或 tag"
-              exit 1
-              ;;
-          esac
+          _release_tag=$(git tag --sort=taggerdate --list 'v25.*' | tail -1)
+          git checkout $_release_tag
           echo "release_tag=$_release_tag" >> $GITHUB_ENV
 
       - name: 缓存 ccache
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}/.ccache
-          key: ccache-${{ env.SOURCE_NAME }}-${{ env.release_tag }}-${{ matrix.device }}-${{ hashFiles('**/feeds.conf.default', '**/Makefile', '**/feeds/*/Makefile') }}
+          path: .ccache
+          key: ccache-${{ env.release_tag }}-${{ matrix.device }}
           restore-keys: |
-            ccache-${{ env.SOURCE_NAME }}-${{ env.release_tag }}-${{ matrix.device }}-
-            ccache-${{ env.SOURCE_NAME }}-${{ env.release_tag }}-
+            ccache-${{ env.release_tag }}-
 
       - name: 启用 ccache
         run: |
           echo "USE_CCACHE=1" >> $GITHUB_ENV
           echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
           ccache -M 5G
-          ccache -o compression=true
           ccache -z
 
-      - name: 缓存 toolchain + staging_dir
+      - name: 缓存 toolchain
         uses: actions/cache@v4
-        id: cache-toolchain
         with:
           path: |
             ${{ env.SOURCE_NAME }}/staging_dir
             ${{ env.SOURCE_NAME }}/build_dir/toolchain-*
-          key: toolchain-${{ env.SOURCE_NAME }}-${{ env.release_tag }}-${{ hashFiles('**/toolchain/**/Makefile', '**/Config-build.in') }}
-          restore-keys: |
-            toolchain-${{ env.SOURCE_NAME }}-${{ env.release_tag }}-
-            toolchain-${{ env.SOURCE_NAME }}-
+          key: toolchain-${{ env.release_tag }}
 
       - name: patch 修补
         run: |
@@ -151,35 +131,28 @@ jobs:
           [ -e patch ] && cp -rf patch/diy/*.patch $SOURCE_NAME/ || true
           [ -e patch ] && cp -rf patch/luci/*.patch $SOURCE_NAME/feeds/luci/ || true
 
-      - name: 加载自定义脚本 diy-part4.sh
+      - name: 加载自定义脚本
         run: |
           chmod +x $DIY_P1_SH
           cd $SOURCE_NAME
           $GITHUB_WORKSPACE/$DIY_P1_SH || true
-          cd ..
-          [ -e patch ] && cp -rf patch/nginx/luci.locations $SOURCE_NAME/feeds/packages/net/nginx/files-luci-support/ || true
-          [ -e patch ] && cp -rf patch/nginx/uci.conf.template $SOURCE_NAME/feeds/packages/net/nginx-util/files/ || true
 
       - name: 加载自定义配置 & files
         run: |
           [ -e files ] && mv files $SOURCE_NAME/files || true
-          
           cat <<EOF >>$SOURCE_NAME/.config
           CONFIG_TARGET_mediatek=y
           CONFIG_TARGET_mediatek_filogic=y
           ${{ matrix.config }}
           EOF
-          
           [ -e config ] && cat config/op25.config >> $SOURCE_NAME/.config || true
-          
           sed -i "s/192.168.1.1/${{ env.OP_IP }}/g" $SOURCE_NAME/package/base-files/files/bin/config_generate
-          
           IFS=' ' read -r -a plugins <<< "${{ env.CUSTOM_PLUGINS }}"
           for plugin in "${plugins[@]}"; do
             [[ -n "$plugin" ]] && echo "CONFIG_PACKAGE_${plugin}=y" >> $SOURCE_NAME/.config
           done
 
-      - name: defconfig + 下载所有依赖
+      - name: defconfig + 下载依赖
         run: |
           cd $SOURCE_NAME
           make defconfig
@@ -189,18 +162,7 @@ jobs:
       - name: 编译源码
         run: |
           cd $SOURCE_NAME
-          echo "编译线程数: $(($(nproc)*2))"
-          make -j$(($(nproc)*2)) IGNORE_ERRORS="n m" V=s || \
-          make -j$(nproc)        IGNORE_ERRORS="n m" V=s || \
-          make -j8               V=s
-
-      - name: 显示 ccache 统计（无论成功失败）
-        if: always()
-        run: ccache -s || true
-
-      - name: 查看磁盘使用情况
-        if: (!cancelled())
-        run: df -hT
+          make -j$(($(nproc)*2)) || make -j$(nproc) || make -j8
 
       - name: 整理输出文件
         id: organize
@@ -209,24 +171,7 @@ jobs:
           rm -rf packages *.buildinfo profiles.json *.manifest *bl2.bin *kernel.bin *.sha sha256sums || true
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
 
-      - name: 上传固件到 Releases
-        uses: softprops/action-gh-release@v2.1.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ env.release_tag }}-${{env.tag}}
-          files: ${{ env.FIRMWARE }}/*
-          body: |
-            ====================固件信息=======================
-            分支/Tag：${{ env.release_tag }}
-            构建日期：${{ env.tag }}
-            设备：${{ env.DEVICE_NAME }}
-            静态IP：${{ env.OP_IP }}
-            插件：${{ env.CUSTOM_PLUGINS }}
-            定制作者：${{ env.OP_author }}
-            默认密码：无
-     
-      - name: 上传固件到 WebDAV 
+       - name: 上传固件到 WebDAV 
         if: success()
         env:
           WEBDAV_BASE: ${{ secrets.WEBDAV_URL }}/Openwrt2512
@@ -244,10 +189,23 @@ jobs:
             fi
           done
 
+      - name: 上传固件到 Releases
+        uses: softprops/action-gh-release@v2.1.0
+        with:
+          tag_name: ${{ env.release_tag }}-${{ env.tag }}
+          files: ${{ env.FIRMWARE }}/*
+          body: |
+            ====================固件信息=======================
+            分支/Tag：${{ env.release_tag }}
+            构建日期：${{ env.tag }}
+            设备：${{ env.DEVICE_NAME }}
+            静态IP：${{ env.OP_IP }}
+            插件：${{ env.CUSTOM_PLUGINS }}
+            定制作者：${{ env.OP_author }}
+            默认密码：无
+
       - name: 清理旧 Releases
         uses: dev-drprasad/delete-older-releases@v0.3.4
         with:
           keep_latest: 7
           delete_tags: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
