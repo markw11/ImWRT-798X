@@ -54,14 +54,6 @@ jobs:
       - name: 检查分支
         uses: actions/checkout@v4
 
-      - name: 释放磁盘空间（安全版）
-        run: |
-          sudo apt-get remove --purge -y firefox* google-chrome* microsoft* mono* dotnet* azure* || true
-          sudo apt-get autoremove -y --purge
-          sudo apt-get clean
-          sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
-          sudo docker system prune -af --volumes || true
-          df -h
 
       - name: 安装编译环境
         env:
@@ -133,17 +125,7 @@ jobs:
           ccache -o compression=true
           ccache -z
 
-      - name: 缓存 toolchain + staging_dir
-        uses: actions/cache@v4
-        id: cache-toolchain
-        with:
-          path: |
-            ${{ env.SOURCE_NAME }}/staging_dir
-            ${{ env.SOURCE_NAME }}/build_dir/toolchain-*
-          key: toolchain-${{ env.SOURCE_NAME }}-${{ env.release_tag }}-${{ hashFiles('**/toolchain/**/Makefile', '**/Config-build.in') }}
-          restore-keys: |
-            toolchain-${{ env.SOURCE_NAME }}-${{ env.release_tag }}-
-            toolchain-${{ env.SOURCE_NAME }}-
+
 
       - name: patch 修补
         run: |
@@ -190,9 +172,7 @@ jobs:
           make -j$(nproc)        IGNORE_ERRORS="n m" V=s || \
           make -j8               V=s
 
-      - name: 显示 ccache 统计（无论成功失败）
-        if: always()
-        run: ccache -s || true
+
 
       - name: 查看磁盘使用情况
         if: (!cancelled())
