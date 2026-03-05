@@ -108,25 +108,6 @@ jobs:
           esac
           echo "release_tag=$_release_tag" >> $GITHUB_ENV
 
-      - name: 缓存 ccache
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/.ccache
-          key: ccache-${{ env.SOURCE_NAME }}-${{ env.release_tag }}-${{ matrix.device }}-${{ hashFiles('**/feeds.conf.default', '**/Makefile', '**/feeds/*/Makefile') }}
-          restore-keys: |
-            ccache-${{ env.SOURCE_NAME }}-${{ env.release_tag }}-${{ matrix.device }}-
-            ccache-${{ env.SOURCE_NAME }}-${{ env.release_tag }}-
-
-      - name: 启用 ccache
-        run: |
-          echo "USE_CCACHE=1" >> $GITHUB_ENV
-          echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
-          ccache -M 5G
-          ccache -o compression=true
-          ccache -z
-
-
-
       - name: patch 修补
         run: |
           cd $SOURCE_NAME
