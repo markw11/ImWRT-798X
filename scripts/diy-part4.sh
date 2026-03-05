@@ -1,86 +1,63 @@
 #!/bin/bash
 
-function git_sparse_clone() {
-  branch="$1" repourl="$2" && shift 2
-  git clone --depth=1 -b $branch --single-branch --filter=blob:none --sparse $repourl
-  repodir=$(echo $repourl | awk -F '/' '{print $(NF)}')
-  cd $repodir && git sparse-checkout set $@
-  mv -f $@ ../
-  cd .. && rm -rf $repodir
-}
-
-set -x
-
-# kenrel Vermagic
+# --- 1. 内核 Vermagic 伪装 (确保能安装官方仓库的插件) ---
 sed -ie 's/^\(.\).*vermagic$/\1cp $(TOPDIR)\/.vermagic $(LINUX_DIR)\/.vermagic/' include/kernel-defaults.mk
 grep HASH target/linux/generic/kernel-6.12 | awk -F'HASH-' '{print $2}' | awk '{print $1}' | md5sum | awk '{print $1}' > .vermagic
 
+# --- 2. 添加第三方轻量化插件 ---
+# 仅保留 shiyu1314 的基础包，剔除占用大的 proxy 仓库
 git clone -b packages --depth 1 --single-branch https://github.com/shiyu1314/openwrt-feeds package/xd
-git clone -b porxy --depth 1 --single-branch https://github.com/shiyu1314/openwrt-feeds package/porxy
 
+# --- 3. 彻底清理冗余/大型包 (节省空间关键) ---
+# 删除占用巨大的服务及其依赖
 rm -rf feeds/luci/applications/{luci-app-dockerman,luci-app-samba4,luci-app-aria2,luci-app-diskman}
 rm -rf feeds/packages/net/{samba4,v2ray-geodata,mosdns,sing-box,aria2,ariang,adguardhome}
 
-# drop attendedsysupgrade （保留，但只针对通用位置，不针对 nginx 集合）
-sed -i '/luci-app-attendedsysupgrade/d' feeds/luci/collections/luci/Makefile
+# --- 4. 系统响应优化 ---
+# 延长 RPC 超时时间，防止 Web 界面在大数据量下卡死
+sed -i 's/option timeout 30/option timeout 60/g' package/system/rpcd/files/rpcd.config
+sed -i 's#20) \* 1000#60) \* 1000#g' feeds/luci/modules/luci-base/htdocs/luci-static/resources/rpc.js
 
-# fstools
-rm -rf package/system/fstools
-git clone https://github.com/sbwml/package_system_fstools -b openwrt-25.12 package/system/fstools
+# 移除没必要的 luci-compat 空行（美化界面）
+sed -i '/<br \/>/d' feeds/luci/modules/luci-compat/luasrc/view/cbi/full_valuefooter.htm
 
-# util-linux
-rm -rf package/utils/util-linux
-git clone https://github.com/sbwml/package_utils_util-linux -b openwrt-25.12 package/utils/util-linux
+# --- 5. 应用核心系统补丁 (LuCI 增强) ---
+pushd feeds/luci
+    # 仅应用最实用的轻量化补丁
+    patch -p1 < 0002-luci-mod-status-displays-actual-process-memory-usage.patch
+    patch -p1 < 0003-luci-mod-status-storage-index-applicable-only-to-val.patch
+    patch -p1 < 0005-luci-mod-system-add-refresh-interval-setting.patch
+popd
 
-# nghttp3
-rm -rf feeds/packages/libs/nghttp3
-git clone https://github.com/sbwml/package_libs_nghttp3 package/libs/nghttp3
+# 应用防火墙自定义规则支持
+patch -p1 --no-backup-if-mismatch < 100-openwrt-firewall4-add-custom-nft-command-support.patch
 
-# ngtcp2
-rm -rf feeds/packages/libs/ngtcp2
-git clone https://github.com/sbwml/package_libs_ngtcp2 package/libs/ngtcp2
-
-# curl - fix passwall `time_pretransfer` check
-rm -rf feeds/packages/net/curl
-git clone https://github.com/sbwml/feeds_packages_net_curl feeds/packages/net/curl
-
-# golang 26.x
-rm -rf feeds/packages/lang/golang
-git clone https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/lang/golang
-
+# --- 6. 自动更新与安装 Feeds ---
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 
-# 强制禁用 nginx 相关包（防止意外被选上）
-cat >> .config << 'EOF'
-CONFIG_PACKAGE_nginx=n
-CONFIG_PACKAGE_nginx-ssl=n
-CONFIG_PACKAGE_nginx-mod-luci=n
-CONFIG_PACKAGE_luci-nginx=n
-CONFIG_PACKAGE_luci-app-nginx=n
-CONFIG_PACKAGE_uwsgi=n
-CONFIG_PACKAGE_uwsgi-luci-support=n
+# --- 7. 终端与登录设置 ---
+# 设置 ttyd 免密登录 root (方便调试)
+if [ -f feeds/packages/utils/ttyd/files/ttyd.config ]; then
+    sed -i 's|/bin/login|/bin/login -f root|g' feeds/packages/utils/ttyd/files/ttyd.config
+fi
+
+# --- 8. 自定义 Banner 与 版本信息 ---
+# 移除原有的 banner
+rm -rf package/base-files/files/etc/banner
+
+# 写入极简风格 Banner
+date=$(date +"%Y-%m-%d")
+cat << 'EOF' > package/base-files/files/etc/banner
+  _______                     ________        __
+ |       |.-----.-----.-----.|  |  |  |.----.|  |_
+ |   -   ||  _  |  -__|  _  ||  |  |  ||  _||   _|
+ |_______||   __|_____|__|__||________||__|  |____|
+          |__| W I R E L E S S   F R E E D O M
+ -----------------------------------------------------
+ %D ${date} by Minimal-Build
+ -----------------------------------------------------
 EOF
 
-# 确保 uhttpd 被启用（通常默认就是，但显式写一下更保险）
-echo "CONFIG_PACKAGE_uhttpd=y" >> .config
-echo "CONFIG_PACKAGE_uhttpd-mod-ubus=y" >> .config
-echo "CONFIG_PACKAGE_uhttpd-mod-tls=y" >> .config   # 如果你想要 https 支持
-
-sed -i 's|/bin/login|/bin/login -f root|g' feeds/packages/utils/ttyd/files/ttyd.config
-
-sudo rm -rf package/base-files/files/etc/banner
-
-sed -i "s/%D %V %C/%D %V $(TZ=UTC-8 date +%Y.%m.%d)/" package/base-files/files/etc/openwrt_release
-sed -i "s/%R/by $OP_author/" package/base-files/files/etc/openwrt_release
-
-date=$(date +"%Y-%m-%d")
-echo " " >> package/base-files/files/etc/banner
-echo " _______ ________ __" >> package/base-files/files/etc/banner
-echo " | |.-----.-----.-----.| | | |.----.| |_" >> package/base-files/files/etc/banner
-echo " | - || _ | -__| || | | || _|| _|" >> package/base-files/files/etc/banner
-echo " |_______|| __|_____|__|__||________||__| |____|" >> package/base-files/files/etc/banner
-echo " |__|" >> package/base-files/files/etc/banner
-echo " -----------------------------------------------------" >> package/base-files/files/etc/banner
-echo " %D ${date} by $OP_author " >> package/base-files/files/etc/banner
-echo " -----------------------------------------------------" >> package/base-files/files/etc/banner
+# 修改版本发布信息
+sed -i "s/%D %V %C/%D %V $(date +%Y.%m.%d)/" package/base-files/files/etc/openwrt_release
