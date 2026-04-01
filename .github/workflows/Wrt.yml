@@ -50,8 +50,8 @@ on:
         required: true
         default: true
      
-  schedule:
-    - cron: '35 5 * * 1' # 每周一 05:35 UTC（北京时间 13:35）
+  #schedule:
+    #- cron: '35 5 * * 1' # 每周一 05:35 UTC（北京时间 13:35）
 
 permissions:
   contents: write
@@ -278,7 +278,7 @@ jobs:
           ## 功能
           - 优化网络性能，支持USB共享、HNAT加速、Ksmbd共享等。
           ${{ env.ENABLE_5G_25DB == 'true' && '- 支持 5G 25dB 高功率。' || '' }}
-          - 默认地址: 192.168.2.1 (密码空)
+          - 默认地址: 192.168.6.1 (密码空)
           ## 安装
           - 备份配置，使用sysupgrade保留配置，factory全新安装。
           - 通过Web上传.bin文件，重启。
@@ -298,7 +298,7 @@ jobs:
           - **5G**: ${{ env.ENABLE_5G_25DB == 'true' && '已启用' || '未启用' }}
           ## 特性
           - 优化性能，支持USB/HNAT/Ksmbd。
-          - 地址: 192.168.2.1 (空密码)
+          - 地址: 192.168.6.1 (空密码)
           ## 安装
           备份 > 上传sysupgrade/factory > 重启。
           详情见README.md。仓库: ${{ env.REPO_URL }}
