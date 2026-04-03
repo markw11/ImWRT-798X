@@ -32,12 +32,12 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        device: ["r30b1", "jcg-q30", "rax3000m-256m-nand"]
+        device: ["clt-r30b1-112m", "q30-pro", "rax3000m-256m-nand"]
         source: ["openwrt"]
         include:
-          - device: "r30b1"
+          - device: "clt-r30b1-112m"
             config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_creatlentem_clt-r30b1-112m=y"
-          - device: "jcg-q30"
+          - device: "q30-pro"
             config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_jcg_q30-pro=y"
           - device: "rax3000m-256m-nand"
             config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cmcc_rax3000m-256m-nand=y"
