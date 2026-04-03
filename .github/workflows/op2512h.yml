@@ -93,6 +93,10 @@ jobs:
               _release_tag=$(git tag --sort=taggerdate --list 'v25.*' | tail -1)
               git checkout $_release_tag
               ;;
+            v25.12.2)
+              _release_tag=$(git tag --sort=taggerdate --list 'v25.*' | tail -1)
+              git checkout $_release_tag
+              ;;
             *)
               echo "无法匹配分支或 tag"
               exit 1
