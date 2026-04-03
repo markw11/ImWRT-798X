@@ -155,8 +155,14 @@ jobs:
         id: organize
         run: |
           cd $SOURCE_NAME/bin/targets/*/*
-          rm -rf packages *.buildinfo profiles.json *.manifest *bl2.bin *kernel.bin *.sha sha256sums || true
+          for file in *; do
+            if [[ -f "$file" ]]; then
+              echo "f $file ..."
+            fi
+          done
+          rm -rf packages *.buildinfo profiles.json *.manifest *.sha sha256sums || true
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+          
 
       - name: 上传固件到 Releases
         uses: softprops/action-gh-release@v2.1.0
