@@ -43,12 +43,12 @@ on:
           - xiaomi_mi-router-wr30u-stock
           - xiaomi_redmi-router-ax6000-stock
           - zyxel_ex5601-t0-stock
-          - zyxel_nwa50ax-pro
+          - clt-r30b1-112M
       enable_5g_25db:
         description: '启用5G 25dB修改'
         type: boolean
         required: true
-        default: true
+        default: false
      
   #schedule:
     #- cron: '35 5 * * 1' # 每周一 05:35 UTC（北京时间 13:35）
