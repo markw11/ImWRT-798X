@@ -1,4 +1,4 @@
-name: openwrt25.12
+name: imtwrt25.12
 
 permissions:
   contents: write
