@@ -132,7 +132,7 @@ jobs:
             echo "VERSION_NAME=25.12" >> $GITHUB_ENV
             echo "当前编译版本: IMwrt-25.12"
           else
-            echo "REPO_URL=${{ github.event.inputs.repo_url || 'https://github.com/padavanonly/immortalwrt-mt798x-24.10' }}" >> $GITHUB_ENV
+            echo "REPO_URL=${{ github.event.inputs.repo_url || 'https://github.com/markw11/immortalwrt-mt798x-6.6' }}" >> $GITHUB_ENV
             echo "REPO_BRANCH=${{ github.event.inputs.repo_branch || 'openwrt-24.10-6.6' }}" >> $GITHUB_ENV
             echo "CONFIG_FILE=config/24.10-6.6.config" >> $GITHUB_ENV
             echo "DIY_P1_SH=scripts/diy-part1.sh" >> $GITHUB_ENV
