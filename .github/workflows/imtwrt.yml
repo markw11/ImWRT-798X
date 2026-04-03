@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        device: ["clt-r30b1-112m", "q30-pro", "rax3000m-256m-nand"]
+        device: ["clt-r30b1-112m", "q30-pro", "rax3000m-256m"]
         source: ["openwrt"]
         include:
           - device: "clt-r30b1-112m"
