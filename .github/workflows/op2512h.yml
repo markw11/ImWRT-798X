@@ -164,7 +164,7 @@ jobs:
               echo "f $file ..."
             fi
           done
-          rm -rf packages *.buildinfo profiles.json *.manifest *.sha sha256sums || true
+          rm -rf packages *.buildinfo profiles.json *bl2.bin *.manifest *.sha sha256sums || true
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
           
 
