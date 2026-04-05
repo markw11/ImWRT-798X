@@ -43,7 +43,7 @@ on:
           - xiaomi_mi-router-wr30u-stock
           - xiaomi_redmi-router-ax6000-stock
           - zyxel_ex5601-t0-stock
-          - mt7981-clt-r30b1-112M
+          - creatlentem_clt-r30b1-112m
       enable_5g_25db:
         description: '启用5G 25dB修改'
         type: boolean
