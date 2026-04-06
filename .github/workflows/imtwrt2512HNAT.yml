@@ -20,7 +20,7 @@ on:
       CUSTOM_PLUGINS:
         description: '自定义插件名称，用空格分隔'
         required: false
-        default: 'luci-theme-aurora luci-app-upnp kmod-batman-adv luci-proto-batman-adv wpad-mesh-openssl luci-app-opkg'
+        default: 'luci-theme-aurora luci-app-upnp kmod-batman-adv luci-proto-batman-adv '
         type: string
 
 env:
@@ -74,8 +74,8 @@ jobs:
           echo "CUSTOM_PLUGINS=${{ github.event.inputs.CUSTOM_PLUGINS }}" >> $GITHUB_ENV
           echo "DEVICE_NAME=${{ matrix.device }}" >> $GITHUB_ENV
           echo "SOURCE_NAME=${{ matrix.source }}" >> $GITHUB_ENV
-          echo "REPO_URL=https://github.com/VIKINGYFY/immortalwrt" >> $GITHUB_ENV
-          echo "REPO_BRANCH=owrt" >> $GITHUB_ENV
+          echo "REPO_URL=https://github.com/chasey-dev/immortalwrt-mt798x-rebase" >> $GITHUB_ENV
+          echo "REPO_BRANCH=25.12-dev" >> $GITHUB_ENV
 
       - name: 克隆源代码
         working-directory: /workdir
