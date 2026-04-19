@@ -20,7 +20,7 @@ on:
       CUSTOM_PLUGINS:
         description: '自定义插件名称，用空格分隔'
         required: false
-        default: 'luci-theme-aurora luci-app-upnp kmod-batman-adv luci-proto-batman-adv '
+        default: 'luci-app-upnp kmod-batman-adv luci-proto-batman-adv '
         type: string
 
 env:
