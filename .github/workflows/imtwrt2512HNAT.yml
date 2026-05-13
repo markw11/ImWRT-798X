@@ -116,10 +116,11 @@ jobs:
           cat <<EOF >>$SOURCE_NAME/.config
           CONFIG_TARGET_mediatek=y
           CONFIG_TARGET_mediatek_filogic=y
+          CONFIG_TARGET_MULTI_PROFILE=y
           ${{ matrix.config }}
           EOF
           
-          [ -e config ] && cat config/op25.config >> $SOURCE_NAME/.config || true
+          [ -e config ] && cat config/imt25.config >> $SOURCE_NAME/.config || true
           
           sed -i "s/192.168.1.1/${{ env.OP_IP }}/g" $SOURCE_NAME/package/base-files/files/bin/config_generate
           
