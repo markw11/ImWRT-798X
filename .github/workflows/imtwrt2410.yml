@@ -1,4 +1,4 @@
-name: imtwrt25.12
+name: imtwrt24.10
 
 permissions:
   contents: write
@@ -32,15 +32,11 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        device: ["clt-r30b1-112m", "q30-pro", "rax3000m-256m"]
+        device: ["q30-pro"]
         source: ["openwrt"]
         include:
-          - device: "clt-r30b1-112m"
-            config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_creatlentem_clt-r30b1-112m=y"
           - device: "q30-pro"
             config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_jcg_q30-pro=y"
-          - device: "rax3000m-256m"
-            config: "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cmcc_rax3000m-256m=y"
 
     steps:
       - name: 检查分支
@@ -76,8 +72,8 @@ jobs:
           echo "CUSTOM_PLUGINS=${{ github.event.inputs.CUSTOM_PLUGINS }}" >> $GITHUB_ENV
           echo "DEVICE_NAME=${{ matrix.device }}" >> $GITHUB_ENV
           echo "SOURCE_NAME=${{ matrix.source }}" >> $GITHUB_ENV
-          echo "REPO_URL=https://github.com/immortalwrt/immortalwrt" >> $GITHUB_ENV
-          echo "REPO_BRANCH=openwrt-25.12" >> $GITHUB_ENV
+          echo "REPO_URL=https://github.com/padavanonly/immortalwrt-mt798x-6.6" >> $GITHUB_ENV
+          echo "REPO_BRANCH=openwrt-24.10-6.6" >> $GITHUB_ENV
 
       - name: 克隆源代码
         working-directory: /workdir
@@ -89,8 +85,8 @@ jobs:
         run: |
           cd $SOURCE_NAME
           case $REPO_BRANCH in
-            openwrt-25.12)
-              _release_tag=$(git tag --sort=taggerdate --list 'v25.*' | tail -1)
+            openwrt-24.10-6.6)
+              _release_tag=$(git tag --sort=taggerdate --list 'v24.*' | tail -1)
               git checkout $_release_tag
               ;;
             *)
@@ -118,10 +114,11 @@ jobs:
           cat <<EOF >>$SOURCE_NAME/.config
           CONFIG_TARGET_mediatek=y
           CONFIG_TARGET_mediatek_filogic=y
+          CONFIG_TARGET_MULTI_PROFILE=y
           ${{ matrix.config }}
           EOF
           
-          [ -e config ] && cat config/op25.config >> $SOURCE_NAME/.config || true
+          [ -e config ] && cat config/24.10-6.6.config >> $SOURCE_NAME/.config || true
           
           sed -i "s/192.168.1.1/${{ env.OP_IP }}/g" $SOURCE_NAME/package/base-files/files/bin/config_generate
           
