@@ -162,10 +162,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: OpenWrt25.12-${{ env.tag }}
+          tag_name: OpenWrt24.10-${{ env.tag }}
           files: ${{ env.FIRMWARE }}/*
           body: |
-            OpenWrt 25.12 (${{ env.tag }})
+            OpenWrt 24.10 (${{ env.tag }})
             ====================固件信息=======================
             分支/Tag：${{ env.release_tag }}
             构建日期：${{ env.tag }}
